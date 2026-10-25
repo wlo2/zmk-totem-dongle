@@ -1,19 +1,22 @@
 name: Build ZMK firmware
 
-on: 
+on:
   push:
   pull_request:
   workflow_dispatch:
+  # build_dongle.yml calls this with shield: totem_dongle to build one target.
+  workflow_call:
     inputs:
-      include_settings_reset:
-        description: 'Build firmware using pre-baked image'
-        required: false
-        default: false
-        type: boolean
+      shield:
+        description: 'Build only this shield from build.yaml (empty = all)'
+        type: string
+        default: ''
 
 # A newer run cancels an older one for the same ref. Keyed on github.ref so a
 # feature-branch push never cancels a main build. This workflow only produces
 # workflow artifacts, so there is nothing external left half-done by a cancel.
+# When called from build_dongle.yml, github.workflow is the caller's name, so
+# dongle runs get their own group and never cancel a full build.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,16 +27,22 @@ jobs:
     name: Fetch Build Keyboards
     outputs:
       build_matrix: ${{ env.build_matrix }}
+      autocorrect_ref: ${{ env.autocorrect_ref }}
+      morph_ref: ${{ env.morph_ref }}
     steps:
-      - name: Configure Git Default Branch
-        run: |
-          git config --global init.defaultBranch main
       - name: Checkout
         uses: actions/checkout@v7
       - name: Fetch Build Matrix
+        env:
+          SHIELD: ${{ inputs.shield }}
         run: |
-          echo "build_matrix=$(yq -oj -I0 'build.yaml')" >> $GITHUB_ENV
+          echo "build_matrix=$(yq -oj -I0 '.include |= map(select(strenv(SHIELD) == "" or .shield == strenv(SHIELD)))' build.yaml)" >> $GITHUB_ENV
           yq -oj "build.yaml"
+      # config/west.yml is the single source for module revisions.
+      - name: Read module revisions
+        run: |
+          echo "autocorrect_ref=$(yq '.manifest.projects[] | select(.name == "zmk_autocorrect") | .revision' config/west.yml)" >> $GITHUB_ENV
+          echo "morph_ref=$(yq '.manifest.projects[] | select(.name == "zmk-antecedent-morph") | .revision' config/west.yml)" >> $GITHUB_ENV
 
   build:
     runs-on: ubuntu-latest
@@ -53,14 +62,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: wlo2/zmk_autocorrect
-          ref: main
+          ref: ${{ needs.matrix.outputs.autocorrect_ref }}
           path: zmk_autocorrect
 
       - name: Checkout zmk-antecedent-morph module
         uses: actions/checkout@v7
         with:
           repository: ssbb/zmk-antecedent-morph
-          ref: v1
+          ref: ${{ needs.matrix.outputs.morph_ref }}
           path: zmk-antecedent-morph
 
       # Use fixed build directory for caching
@@ -76,11 +85,6 @@ jobs:
           artifact_name: ${{ matrix.artifact-name }}
           snippet: ${{ matrix.snippet }}
         run: |
-          # The container image already exports ZEPHYR_BASE, but expression
-          # context (${{ env.X }}) only reads workflow env and $GITHUB_ENV --
-          # never the image's ENV -- so it has to be re-exported here for the
-          # West Build step to reference it.
-          echo "ZEPHYR_BASE=/opt/zmk-env/zephyr" >> $GITHUB_ENV
           export zmk_load_arg=" -DZMK_EXTRA_MODULES='${GITHUB_WORKSPACE};${GITHUB_WORKSPACE}/zmk_autocorrect;${GITHUB_WORKSPACE}/zmk-antecedent-morph'"
 
           if [ -n "${snippet}" ]; then
@@ -92,18 +96,10 @@ jobs:
           echo "display_name=${shield:+$shield - }${board}" >> $GITHUB_ENV
           echo "artifact_name=${artifact_name:-${shield:+$shield-}${board}-zmk}" >> $GITHUB_ENV
 
-      - name: Verify Zephyr tree
-        run: |
-          set -eux
-          echo "ZEPHYR_BASE=${ZEPHYR_BASE}"
-          test -d "${ZEPHYR_BASE}" || (echo "Missing ZEPHYR_BASE dir" && exit 1)
-          ls -al "${ZEPHYR_BASE}" | head -n 50 || true
-          test -f "${ZEPHYR_BASE}/share/zephyr-package/cmake/ZephyrConfig.cmake" || (echo "Missing ZephyrConfig.cmake under ${ZEPHYR_BASE}/share/zephyr-package/cmake" && exit 1)
-
       # Note: GitHub Actions caches have a fixed 7-day retention for unused caches.
       # This cannot be changed. Caches are kept alive by accessing them regularly.
       # If you need longer retention, consider using artifacts instead (configurable up to 90 days).
-      
+
       # Cache build artifacts - keymap changes invalidate, module changes don't
       # (since you update modules frequently and want fresh builds with them)
       - name: Cache West build
@@ -115,11 +111,10 @@ jobs:
           restore-keys: |
             west-build-${{ matrix.board }}-${{ matrix.shield }}-
 
+      # ZEPHYR_BASE comes from the image's ENV, which the container shell inherits.
       - name: West Build (${{ env.display_name }})
         working-directory: /opt/zmk-env
         shell: sh -x {0}
-        env:
-          ZEPHYR_BASE: ${{ env.ZEPHYR_BASE }}
         run: west build -s zmk/app -d "${{ env.build_dir }}" -b "${{ matrix.board }}" ${{ env.extra_west_args }} -- -DZMK_CONFIG=${GITHUB_WORKSPACE}/config -DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake ${{ env.extra_cmake_args }} ${{ matrix.cmake-args }}
 
       - name: ${{ env.display_name }} Kconfig file
@@ -153,6 +148,9 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     needs: build
+    # A single-shield build (build_dongle.yml) consumes its per-board artifact
+    # directly, so there is nothing to bundle and it must not be deleted.
+    if: ${{ !inputs.shield }}
     name: Merge Output Artifacts
     steps:
       - name: Get formatted timestamp for archive name

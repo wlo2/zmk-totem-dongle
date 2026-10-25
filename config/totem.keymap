@@ -172,7 +172,7 @@
         Gaming {
             bindings = <
         &trans   &trans  &kp NUMBER_3  &trans        &trans          &trans  &trans  &trans  &trans  &trans
-        &kp ESC  &kp Q   &kp W         &kp E         &kp R           &tog 0  &trans  &trans  &trans  &trans
+        &kp ESC  &kp Q   &kp W         &kp E         &kp R           &to 0   &trans  &trans  &trans  &trans
 &trans  &trans   &trans  &trans        &kp TAB       &trans          &trans  &trans  &trans  &trans  &trans  &trans
                          &trans        &kp NUMBER_1  &kp LEFT_ALT    &trans  &trans  &trans
             >;

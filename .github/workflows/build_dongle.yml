@@ -8,117 +8,42 @@ on:
       - 'config/totem.keymap'
   workflow_dispatch:
 
-# A newer run cancels an older one for the same ref. The release upload and
-# asset prune are the only externally-visible side effects and both are
-# idempotent -- a cancelled run is re-done by the next one -- so cancelling
-# mid-flight is safe here.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# No workflow-level concurrency here: build.yml already has one, and a caller
+# sharing the called workflow's group is cancelled as a deadlock. A newer run
+# still cancels an older one's build; the release upload and asset prune are
+# idempotent, so an older run finishing late is harmless.
 
 jobs:
+  # Same build as the full workflow, filtered to the dongle. It runs with the
+  # default read-only token, so module code executed during the build cannot
+  # write to the repo or the release.
   build:
+    uses: ./.github/workflows/build.yml
+    with:
+      shield: totem_dongle
+
+  release:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/zmk-zephyr:latest
-    name: Build Dongle
-    permissions:  # Added for GITHUB_TOKEN to create releases
+    needs: build
+    name: Publish dongle release
+    permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # Always checkout external modules (no cache since you update them frequently)
-      - name: Checkout zmk_autocorrect module
-        uses: actions/checkout@v7
+      - name: Download dongle firmware
+        uses: actions/download-artifact@v8
         with:
-          repository: wlo2/zmk_autocorrect
-          ref: main
-          path: zmk_autocorrect
-
-      - name: Checkout zmk-antecedent-morph module
-        uses: actions/checkout@v7
-        with:
-          repository: ssbb/zmk-antecedent-morph
-          ref: v1
-          path: zmk-antecedent-morph
+          name: artifact-totem_dongle
 
       - name: Get formatted timestamp for artifact name
         id: timestamp_generator
         run: |
-          formatted_time=$(date -u +%d%m%Y_%H%M)
           # This stem is used verbatim for both the workflow artifact and the
           # release asset. With upload-artifact's archive: false the filename
           # becomes the artifact name, so the file on disk must already be
           # called exactly what you want to download.
-          echo "ARTIFACT_NAME=totem_dongle_$formatted_time" >> $GITHUB_OUTPUT
-
-      # Use fixed build directory for caching
-      - name: Create build directory
-        run: |
-          echo "build_dir=${GITHUB_WORKSPACE}/build-dongle" >> $GITHUB_ENV
-
-      - name: Prepare variables
-        shell: sh -x {0}
-        run: |
-          # The container image already exports ZEPHYR_BASE, but expression
-          # context (${{ env.X }}) only reads workflow env and $GITHUB_ENV --
-          # never the image's ENV -- so it has to be re-exported here for the
-          # West Build step to reference it.
-          echo "ZEPHYR_BASE=/opt/zmk-env/zephyr" >> $GITHUB_ENV
-          export zmk_load_arg=" -DZMK_EXTRA_MODULES='${GITHUB_WORKSPACE};${GITHUB_WORKSPACE}/zmk_autocorrect;${GITHUB_WORKSPACE}/zmk-antecedent-morph'"
-
-          echo "extra_cmake_args=-DSHIELD=\"totem_dongle\"${zmk_load_arg}" >> $GITHUB_ENV
-
-      - name: Verify Zephyr tree
-        run: |
-          set -eux
-          echo "ZEPHYR_BASE=${ZEPHYR_BASE}"
-          test -d "${ZEPHYR_BASE}" || (echo "Missing ZEPHYR_BASE dir" && exit 1)
-          ls -al "${ZEPHYR_BASE}" | head -n 50 || true
-          test -f "${ZEPHYR_BASE}/share/zephyr-package/cmake/ZephyrConfig.cmake" || (echo "Missing ZephyrConfig.cmake under ${ZEPHYR_BASE}/share/zephyr-package/cmake" && exit 1)
-
-      # Cache build artifacts - keymap changes invalidate, module changes don't
-      - name: Cache West build
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ github.workspace }}/build-dongle
-          key: west-build-dongle-${{ hashFiles('config/*.conf', 'config/*.keymap', 'config/*.dtsi', 'boards/**') }}-v1
-          restore-keys: |
-            west-build-dongle-
-
-      - name: West Build (Dongle)
-        working-directory: /opt/zmk-env
-        shell: sh -x {0}
-        env:
-          ZEPHYR_BASE: ${{ env.ZEPHYR_BASE }}
-        run: west build -s zmk/app -d "${{ env.build_dir }}" -b xiao_ble -- -DZMK_CONFIG=${GITHUB_WORKSPACE}/config -DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake ${{ env.extra_cmake_args }}
-
-      - name: Dongle Kconfig file
-        run: |
-          if [ -f "${{ env.build_dir }}/zephyr/.config" ]
-          then
-            grep -v -e "^#" -e "^$" "${{ env.build_dir }}/zephyr/.config" | sort
-          else
-            echo "No Kconfig output"
-          fi
-        if: ${{ !cancelled() }}
-
-      - name: Rename artifacts
-        shell: sh -x {0}
-        run: |
-          mkdir -p "${{ env.build_dir }}/artifacts"
-          UF2_FILE="${{ env.build_dir }}/zephyr/zmk.uf2"
-          TIMESTAMPED_NAME="${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}"
-
-          if [ -f "$UF2_FILE" ]; then
-            echo "Copying .uf2 file: $UF2_FILE -> ${{ env.build_dir }}/artifacts/${TIMESTAMPED_NAME}.uf2"
-            cp "$UF2_FILE" "${{ env.build_dir }}/artifacts/${TIMESTAMPED_NAME}.uf2"
-          else
-            echo "Error: No zmk.uf2 found in build output!"
-            exit 1
-          fi
+          ARTIFACT_NAME="totem_dongle_$(date -u +%d%m%Y_%H%M)"
+          mv totem_dongle.uf2 "${ARTIFACT_NAME}.uf2"
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
 
       - name: Archive dongle firmware
         id: artifact
@@ -129,7 +54,7 @@ jobs:
           # ignores `name:`, taking the artifact name from the filename --
           # hence totem_dongle_DDMMYYYY_HHMM.uf2 above.
           archive: false
-          path: ${{ env.build_dir }}/artifacts/${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
+          path: ${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
           retention-days: 30
 
       # Update the 'latest' GitHub Release with the latest .uf2 file
@@ -140,35 +65,11 @@ jobs:
           name: Latest Dongle Firmware
           draft: false
           prerelease: false
-          files: ${{ env.build_dir }}/artifacts/${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
+          files: ${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Job summary
-        if: ${{ !cancelled() }}
-        run: |
-          {
-            echo "### Dongle firmware"
-            echo
-            echo "| | |"
-            echo "|---|---|"
-            echo "| File | \`${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2\` |"
-            echo "| Artifact | [direct download](${{ steps.artifact.outputs.artifact-url }}) |"
-            echo "| Release | [dongle-latest](${{ github.server_url }}/${{ github.repository }}/releases/tag/dongle-latest) |"
-            echo "| SHA-256 | \`${{ steps.artifact.outputs.artifact-digest }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # Kept in its own job because the Zephyr build container has no `gh`, while
-  # ubuntu-latest ships it preinstalled. `needs: build` also means a failed
-  # build never prunes.
-  prune:
-    runs-on: ubuntu-latest
-    needs: build
-    name: Prune old release assets
-    permissions:
-      contents: write
-    steps:
       - name: Keep only the newest assets on dongle-latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -192,3 +93,17 @@ jobs:
             echo "Deleting ${name} (asset id ${id})"
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
           done
+
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### Dongle firmware"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| File | \`${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2\` |"
+            echo "| Artifact | [direct download](${{ steps.artifact.outputs.artifact-url }}) |"
+            echo "| Release | [dongle-latest](${{ github.server_url }}/${{ github.repository }}/releases/tag/dongle-latest) |"
+            echo "| SHA-256 | \`${{ steps.artifact.outputs.artifact-digest }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

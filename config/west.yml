@@ -6,6 +6,8 @@ manifest:
       url-base: https://github.com/ssbb
     - name: wlo2
       url-base: https://github.com/wlo2
+  # CI reads the module revisions below (build.yml, matrix job), so this is
+  # the one place to bump them. ZMK itself comes from the prebaked image.
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -13,7 +15,9 @@ manifest:
       import: app/west.yml
     - name: zmk-antecedent-morph
       remote: ssbb
-      revision: v1
+      # Third-party code that runs during the build, so pinned to a commit
+      # instead of the movable v1 tag (this SHA is v1 as of 2024-12-11).
+      revision: 43f3730c8d261a34126f5f4424be23dab762e4c4
     - name: zmk_autocorrect
       remote: wlo2
       revision: main

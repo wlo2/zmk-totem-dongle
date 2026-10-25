@@ -6,8 +6,7 @@ WORKDIR /opt/zmk-env
 # Initialize west and ensure Zephyr SDK is exported
 RUN west init -m https://github.com/zmkfirmware/zmk --mr main --mf app/west.yml . && \
     west update --fetch-opt=--filter=tree:0 && \
-    west zephyr-export && \
-    echo "export ZEPHYR_BASE=/opt/zmk-env/zephyr" >> /root/.bashrc
+    west zephyr-export
 
 # Ensure Zephyr SDK paths are available
 ENV ZEPHYR_BASE=/opt/zmk-env/zephyr
