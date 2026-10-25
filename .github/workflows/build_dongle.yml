@@ -28,6 +28,9 @@ jobs:
     name: Publish dongle release
     permissions:
       contents: write
+      actions: write  # to delete the intermediate zipped artifact
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Download dongle firmware
         uses: actions/download-artifact@v8
@@ -57,22 +60,23 @@ jobs:
           path: ${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
           retention-days: 30
 
+      # build.yml uploads every board zipped as artifact-<name>. The .uf2 above
+      # replaces it here, so drop it and leave the run with the .uf2 only.
+      - name: Delete zipped build artifact
+        run: |
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+                 --jq '.artifacts[] | select(.name == "artifact-totem_dongle") | .id')
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}"
+
       # Update the 'latest' GitHub Release with the latest .uf2 file
       - name: Update Latest Release and Upload Asset
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: dongle-latest
-          name: Latest Dongle Firmware
-          draft: false
-          prerelease: false
-          files: ${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view dongle-latest -R "${GITHUB_REPOSITORY}" >/dev/null 2>&1 ||
+            gh release create dongle-latest -R "${GITHUB_REPOSITORY}" --title "Latest Dongle Firmware" --notes ""
+          gh release upload dongle-latest "${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2" -R "${GITHUB_REPOSITORY}"
 
       - name: Keep only the newest assets on dongle-latest
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KEEP: 5
         run: |
           set -euo pipefail

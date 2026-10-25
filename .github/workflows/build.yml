@@ -72,11 +72,6 @@ jobs:
           ref: ${{ needs.matrix.outputs.morph_ref }}
           path: zmk-antecedent-morph
 
-      # Use fixed build directory for caching
-      - name: Create build directory
-        run: |
-          echo "build_dir=${GITHUB_WORKSPACE}/build-${{ matrix.board }}-${{ matrix.shield }}" >> $GITHUB_ENV
-
       - name: Prepare variables
         shell: sh -x {0}
         env:
@@ -91,25 +86,11 @@ jobs:
             extra_west_args="-S \"${snippet}\""
           fi
 
+          echo "build_dir=${GITHUB_WORKSPACE}/build" >> $GITHUB_ENV
           echo "extra_west_args=${extra_west_args}" >> $GITHUB_ENV
           echo "extra_cmake_args=${shield:+-DSHIELD=\"$shield\"}${zmk_load_arg}" >> $GITHUB_ENV
           echo "display_name=${shield:+$shield - }${board}" >> $GITHUB_ENV
           echo "artifact_name=${artifact_name:-${shield:+$shield-}${board}-zmk}" >> $GITHUB_ENV
-
-      # Note: GitHub Actions caches have a fixed 7-day retention for unused caches.
-      # This cannot be changed. Caches are kept alive by accessing them regularly.
-      # If you need longer retention, consider using artifacts instead (configurable up to 90 days).
-
-      # Cache build artifacts - keymap changes invalidate, module changes don't
-      # (since you update modules frequently and want fresh builds with them)
-      - name: Cache West build
-        uses: actions/cache@v6
-        with:
-          path: |
-            ${{ github.workspace }}/build-${{ matrix.board }}-${{ matrix.shield }}
-          key: west-build-${{ matrix.board }}-${{ matrix.shield }}-${{ hashFiles('config/*.conf', 'config/*.keymap', 'config/*.dtsi', 'boards/**') }}-v1
-          restore-keys: |
-            west-build-${{ matrix.board }}-${{ matrix.shield }}-
 
       # ZEPHYR_BASE comes from the image's ENV, which the container shell inherits.
       - name: West Build (${{ env.display_name }})
@@ -178,6 +159,6 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Bundle | [\`${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.zip\`](${{ steps.merged.outputs.artifact-url }}) |"
-            echo "| Contents | totem_left.uf2, totem_right.uf2, totem_dongle.uf2 |"
+            echo "| Contents | totem_left.uf2, totem_right.uf2, totem_dongle.uf2, settings_reset.uf2 |"
             echo "| SHA-256 | \`${{ steps.merged.outputs.artifact-digest }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

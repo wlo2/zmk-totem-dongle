@@ -51,17 +51,19 @@ This configuration uses ZMK's bootloader support using Zephyr 4.1. The `&bootloa
 
 ### Configuration
 
-#### Dongle Configuration
+All three boards build for `xiao_ble//zmk`, ZMK's variant of the XIAO BLE. Its
+defconfig already enables bootloader entry via retention memory and the
+Adafruit boot-mode magic, so the shields need no extra config for it:
 
-The dongle is configured to support bootloader entry via retention memory and magic mapper:
-
-**`boards/shields/totem/totem_dongle.conf`:**
 ```conf
 CONFIG_RETENTION=y
 CONFIG_RETENTION_BOOT_MODE=y
 CONFIG_RETAINED_MEM=y
 CONFIG_ZMK_BOOTMODE_MAGIC_VALUE_BOOTLOADER_TYPE_ADAFRUIT_NRF52=y
 ```
+
+Plain `xiao_ble` is the stock Zephyr board and has none of this (nor ZMK's
+settings storage), so do not use it as the build target.
 
 ### Usage
 
@@ -72,5 +74,5 @@ CONFIG_ZMK_BOOTMODE_MAGIC_VALUE_BOOTLOADER_TYPE_ADAFRUIT_NRF52=y
 
 ### Requirements
 
-- **Boards**: `xiao_ble` board definition for Seeeduino XIAO BLE and BLE Sense
+- **Boards**: `xiao_ble//zmk` board variant for Seeeduino XIAO BLE and BLE Sense
 - **UF2 bootloader**: Adafruit/TinyUF2 bootloader version 0.9.2 or later required on XIAO BLE boards. Older Seeed UF2 bootloaders (e.g. 0.6.x) may not support this behavior.
