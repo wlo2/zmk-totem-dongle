@@ -27,7 +27,6 @@ jobs:
     name: Fetch Build Keyboards
     outputs:
       build_matrix: ${{ env.build_matrix }}
-      autocorrect_ref: ${{ env.autocorrect_ref }}
       morph_ref: ${{ env.morph_ref }}
     steps:
       - name: Checkout
@@ -41,7 +40,6 @@ jobs:
       # config/west.yml is the single source for module revisions.
       - name: Read module revisions
         run: |
-          echo "autocorrect_ref=$(yq '.manifest.projects[] | select(.name == "zmk_autocorrect") | .revision' config/west.yml)" >> $GITHUB_ENV
           echo "morph_ref=$(yq '.manifest.projects[] | select(.name == "zmk-antecedent-morph") | .revision' config/west.yml)" >> $GITHUB_ENV
 
   build:
@@ -57,14 +55,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Always checkout external modules (no cache since you update them frequently)
-      - name: Checkout zmk_autocorrect module
-        uses: actions/checkout@v7
-        with:
-          repository: wlo2/zmk_autocorrect
-          ref: ${{ needs.matrix.outputs.autocorrect_ref }}
-          path: zmk_autocorrect
-
+      # External modules, at the revisions pinned in config/west.yml
       - name: Checkout zmk-antecedent-morph module
         uses: actions/checkout@v7
         with:
@@ -80,7 +71,7 @@ jobs:
           artifact_name: ${{ matrix.artifact-name }}
           snippet: ${{ matrix.snippet }}
         run: |
-          export zmk_load_arg=" -DZMK_EXTRA_MODULES='${GITHUB_WORKSPACE};${GITHUB_WORKSPACE}/zmk_autocorrect;${GITHUB_WORKSPACE}/zmk-antecedent-morph'"
+          export zmk_load_arg=" -DZMK_EXTRA_MODULES='${GITHUB_WORKSPACE};${GITHUB_WORKSPACE}/zmk-antecedent-morph'"
 
           if [ -n "${snippet}" ]; then
             extra_west_args="-S \"${snippet}\""
