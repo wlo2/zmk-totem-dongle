@@ -45,6 +45,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
+      # To roll back an image rebuild, swap :latest for a dated tag
+      # (YYYYMMDD-HHmm) pushed by build-image.yml.
       image: ghcr.io/${{ github.repository_owner }}/zmk-zephyr:latest
     needs: matrix
     name: Build
@@ -128,7 +130,7 @@ jobs:
       - name: Get formatted timestamp for archive name
         id: timestamp_generator
         run: |
-          formatted_time=$(date -u +%d%m%Y_%H%M)
+          formatted_time=$(TZ=Europe/Sofia date +%d%m%Y_%H%M)
           echo "ARTIFACT_NAME=zmk_$formatted_time" >> $GITHUB_OUTPUT
 
       - name: Merge Artifacts

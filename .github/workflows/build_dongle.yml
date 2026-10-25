@@ -1,11 +1,8 @@
 name: Build ZMK Dongle Only
 
+# Manual only: every push already builds the dongle in build.yml. Run this to
+# publish a dongle release.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'config/totem.keymap'
   workflow_dispatch:
 
 # No workflow-level concurrency here: build.yml already has one, and a caller
@@ -44,7 +41,7 @@ jobs:
           # release asset. With upload-artifact's archive: false the filename
           # becomes the artifact name, so the file on disk must already be
           # called exactly what you want to download.
-          ARTIFACT_NAME="totem_dongle_$(date -u +%d%m%Y_%H%M)"
+          ARTIFACT_NAME="totem_dongle_$(TZ=Europe/Sofia date +%d%m%Y_%H%M)"
           mv totem_dongle.uf2 "${ARTIFACT_NAME}.uf2"
           echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
 

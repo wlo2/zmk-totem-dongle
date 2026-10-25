@@ -37,7 +37,7 @@ configure nine unconnected GPIOs on the dongle.
 Removed as redundant
 
 ## `timestamp_generator` job
-Artifacts have naming scheme `zmk_DDMMYYYY_HHMM`
+Artifacts have naming scheme `zmk_DDMMYYYY_HHMM` (Europe/Sofia time)
 
 # Layout description
 tbd

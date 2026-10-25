@@ -34,8 +34,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/zmk-zephyr
+          # The dated tag keeps every image addressable, so a rebuild that
+          # breaks the firmware build can be rolled back in build.yml.
           tags: |
             type=raw,value=latest
+            type=raw,value={{date 'YYYYMMDD-HHmm' tz='Europe/Sofia'}}
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
