@@ -10,9 +10,13 @@ on:
 # still cancels an older one's build; the release upload and asset prune are
 # idempotent, so an older run finishing late is harmless.
 
+# Read-only by default; only the release job below gets write access.
+permissions:
+  contents: read
+
 jobs:
   # Same build as the full workflow, filtered to the dongle. It runs with the
-  # default read-only token, so module code executed during the build cannot
+  # read-only token above, so module code executed during the build cannot
   # write to the repo or the release.
   build:
     uses: ./.github/workflows/build.yml

@@ -12,6 +12,12 @@ on:
         type: string
         default: ''
 
+# Builds run third-party module code, so the token can only read the repo,
+# whatever the repository default is. Artifact upload/merge/delete use the
+# runner's own token, and the GHCR image is public, so nothing more is needed.
+permissions:
+  contents: read
+
 # A newer run cancels an older one for the same ref. Keyed on github.ref so a
 # feature-branch push never cancels a main build. This workflow only produces
 # workflow artifacts, so there is nothing external left half-done by a cancel.
