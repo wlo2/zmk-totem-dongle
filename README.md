@@ -70,7 +70,10 @@ settings storage), so do not use it as the build target.
 #### Triggering Bootloader on Dongle from periferals
 
 > [!IMPORTANT]
-> Requires to be called from macro (for `Central` locality) 
+> Use a combo: combos run on the dongle, so `&bootloader` in a combo reboots the
+> dongle. A plain `&bootloader` key reboots the half you press it on, and so
+> does a macro holding one (ZMK since 2024-09-23; macros used to run on the
+> central, which is where the old "use a macro" advice came from).
 
 ### Requirements
 

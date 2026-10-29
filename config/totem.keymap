@@ -66,27 +66,34 @@
         };
     };
 
+    // Positions are picked on QWERTY. Combos stay off Gaming (5), where they
+    // would swallow and delay game keys, and Del stays off Whirl_mod (1),
+    // where position 0 is Shift. Del is still on Nav.
     combos {
         compatible = "zmk,combos";
 
         Del {
             bindings = <&kp DEL>;
             key-positions = <0 1>;
+            layers = <0 2 3 4>;
         };
 
         Lang {
             bindings = <&kp CAPSLOCK>;
             key-positions = <2 13>;
+            layers = <0 1 2 3 4>;
         };
 
         Tri-layer {
             bindings = <&mo 4>;
             key-positions = <33 36>;
+            layers = <0 1 2 3 4>;
         };
 
         Bootloader {
             bindings = <&bootloader>;
             key-positions = <0 2 4>;
+            layers = <0 1 2 3 4>;
         };
     };
 

@@ -57,14 +57,6 @@ jobs:
           path: ${{ steps.timestamp_generator.outputs.ARTIFACT_NAME }}.uf2
           retention-days: 30
 
-      # build.yml uploads every board zipped as artifact-<name>. The .uf2 above
-      # replaces it here, so drop it and leave the run with the .uf2 only.
-      - name: Delete zipped build artifact
-        run: |
-          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
-                 --jq '.artifacts[] | select(.name == "artifact-totem_dongle") | .id')
-          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}"
-
       # Update the 'latest' GitHub Release with the latest .uf2 file
       - name: Update Latest Release and Upload Asset
         run: |
@@ -94,6 +86,15 @@ jobs:
             echo "Deleting ${name} (asset id ${id})"
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
           done
+
+      # build.yml uploads every board zipped as artifact-<name>. The .uf2 above
+      # replaces it, so drop it and leave the run with the .uf2 only. This runs
+      # last, so if publishing fails, "Re-run failed jobs" still finds the zip.
+      - name: Delete zipped build artifact
+        run: |
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+                 --jq '.artifacts[] | select(.name == "artifact-totem_dongle") | .id')
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}"
 
       - name: Job summary
         if: ${{ !cancelled() }}

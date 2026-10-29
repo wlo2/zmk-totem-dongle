@@ -37,16 +37,22 @@ jobs:
         run: |
           echo "build_matrix=$(yq -oj -I0 '.include |= map(select(strenv(SHIELD) == "" or .shield == strenv(SHIELD)))' build.yaml)" >> $GITHUB_ENV
           yq -oj "build.yaml"
-      # config/west.yml is the single source for module revisions.
+      # config/west.yml is the single source for module revisions. yq -e fails
+      # the job when the entry is gone; an empty ref would check out the
+      # module's unpinned default branch. It needs its own line, because
+      # echo "...$(...)" hides the exit code.
       - name: Read module revisions
         run: |
-          echo "morph_ref=$(yq '.manifest.projects[] | select(.name == "zmk-antecedent-morph") | .revision' config/west.yml)" >> $GITHUB_ENV
+          morph_ref=$(yq -e '.manifest.projects[] | select(.name == "zmk-antecedent-morph") | .revision' config/west.yml)
+          echo "morph_ref=${morph_ref}" >> $GITHUB_ENV
 
   build:
     runs-on: ubuntu-latest
     container:
       # To roll back an image rebuild, swap :latest for a dated tag
-      # (YYYYMMDD-HHmm) pushed by build-image.yml.
+      # (YYYYMMDD-HHmm) pushed by build-image.yml. The last image from before
+      # dated tags (ZMK main of 2026-10-25) has only a digest:
+      # ghcr.io/wlo2/zmk-zephyr@sha256:50f41066cc91f56b47a9b8b21690aa79377dc6ede251ce0883428cdcf7d7d6c3
       image: ghcr.io/${{ github.repository_owner }}/zmk-zephyr:latest
     needs: matrix
     name: Build
